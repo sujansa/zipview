@@ -1,0 +1,2711 @@
+/*
+ Crisbox ZipView
+ Sujan S A messagesujan@yahoo.co.in
+ 
+ todo:
+
+
+ image zoom: Zoom a rectangular region only
+ History: recent regex, smart reminders
+ preferences: 
+ Slide delay, 
+ show file-name on title bar, 
+ max Zoom (2x, 3x, ... for abs fit), 
+ Thumbnails buff
+ ''         size
+
+ Progress bar:
+ */
+package com.sujan.crisbox.zipview;
+
+import java.awt.image.BufferedImage;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Image;
+import java.awt.GraphicsEnvironment;
+import java.awt.Font;
+import java.awt.GridLayout;
+import java.awt.Dimension;
+import java.awt.GraphicsDevice;
+
+import java.awt.event.MouseListener;
+import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyAdapter;
+import java.awt.event.ActionEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.WindowEvent;
+
+import java.net.URL;
+
+import java.io.IOException;
+import java.io.File;
+import java.io.InputStream;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+
+import java.util.zip.ZipFile;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+import java.util.zip.ZipInputStream;
+
+import java.util.Random;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.LinkedList;
+import java.util.HashMap;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.Map;
+
+import javax.swing.ListSelectionModel;
+import javax.swing.JMenuItem;
+import javax.swing.JLabel;
+import javax.swing.JMenuBar;
+import javax.swing.JMenu;
+import javax.swing.ImageIcon;
+import javax.swing.JPanel;
+import javax.swing.JFrame;
+import javax.swing.JScrollPane;
+import javax.swing.JScrollBar;
+import javax.swing.JSplitPane;
+import javax.swing.JButton;
+import javax.swing.JOptionPane;
+import javax.swing.JEditorPane;
+import javax.swing.JFileChooser;
+import javax.swing.JPopupMenu;
+import javax.swing.KeyStroke;
+import javax.swing.JTextField;
+import javax.swing.JComboBox;
+import javax.swing.UIManager;
+import javax.swing.ScrollPaneConstants;
+
+import javax.swing.filechooser.FileFilter;
+
+import javax.swing.border.LineBorder;
+
+import com.sujan.crisbox.util.RE;
+import com.sujan.crisbox.util.StreamCopier;
+import com.sujan.crisbox.tools.SujOption;
+import com.sujan.crisbox.crypto.Cpt;
+import com.sujan.crisbox.crypto.Crypto;
+
+/**
+ * @author Sujan S A
+ * @version 1.2
+ */
+public class ZipView {
+	public static void createAndShowGUI() {
+		ZipViewFrame frame = new ZipViewFrame();
+		// frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		// frame.addWindowListener(new WindowListener() {
+		// public void windowClosing(WindowEvent event) {
+		// SujOption.writeConsole();
+		// System.exit();
+		// }
+		// });
+		// frame.setVisible(true); not required
+
+	}
+
+	public static void main(String args[]) {
+		// Schedule a job for the event-dispatching thread:
+		// creating and showing this application's GUI.
+		javax.swing.SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+
+				createAndShowGUI();
+			}
+		});
+	}
+}
+
+class ZipViewFrame extends JFrame {
+	void closeApp() {
+		closeArchive();
+		SujOption.timeStampConsole("**** ZipView Exit: ");
+		SujOption.saveConsole();
+		System.exit(0);
+	}
+
+	public ZipViewFrame() {
+		try {
+			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+		} catch (Exception e) {
+			System.out.println("Exception: setLookAndFeel() failed: " + e);
+			e.printStackTrace();
+		}
+
+		this.setTitle(getCustomTitle());
+		this.setSize(DEFAULT_WIDTH, DEFAULT_HEIGHT);
+		this.setLocation(100, 100);
+		this.addWindowListener(new WindowAdapter() {
+			public void windowClosing(WindowEvent e) {
+				closeApp();
+			}
+		});
+		regExList = new LinkedList<String>();
+		thumbsIndex = new LinkedList<Integer>();
+		textFileIcon = new ImageIcon(ZipView.class
+				.getResource("/com/sujan/res/icons/file_text_smallP"));
+		imageFileIcon = new ImageIcon(ZipView.class
+				.getResource("/com/sujan/res/icons/file_image_smallP"));
+		dirIcon = new ImageIcon(ZipView.class
+				.getResource("/com/sujan/res/icons/dir_xp_smallP"));
+		unknownFileIcon = new ImageIcon(
+				ZipView.class
+						.getResource("/com/sujan/res/icons/file_xp_unknown_smallP"));
+		largeDirIcon = new ImageIcon(ZipView.class
+				.getResource("/com/sujan/res/icons/dir_xp_3dP"));
+		largeImageIcon = new ImageIcon(ZipView.class
+				.getResource("/com/sujan/res/icons/file_imageP"));
+		largeMediaIcon = new ImageIcon(ZipView.class
+				.getResource("/com/sujan/res/icons/file_xp_mediaP"));
+		largeExeIcon = new ImageIcon(ZipView.class
+				.getResource("/com/sujan/res/icons/file_exeP"));
+		largeWhiteFileIcon = new ImageIcon(ZipView.class
+				.getResource("/com/sujan/res/icons/file_whiteP"));
+		wizardIcon = new ImageIcon(ZipView.class
+				.getResource("/com/sujan/res/img/wizardG"));
+		sujanIcon = new ImageIcon(ZipView.class
+				.getResource("/com/sujan/res/icons/combine_smallP"));
+		sujanTinyIcon = new ImageIcon(ZipView.class
+				.getResource("/com/sujan/res/icons/combine_tinyP"));
+		exeIcon = new ImageIcon(ZipView.class
+				.getResource("/com/sujan/res/icons/file_exe_smallP"));
+		mediaIcon = new ImageIcon(ZipView.class
+				.getResource("/com/sujan/res/icons/file_xp_media_smallP"));
+		defaultImage = new ImageIcon(ZipView.class
+				.getResource("/com/sujan/res/img/Ferrari3b.jpg"));
+		this.setIconImage(sujanTinyIcon.getImage()); //
+		SujOption.initConsole();// ///////////////////////////////////////////////////////////////////////////////////////////
+		// SujOption.showConsole();
+
+		SujOption.timeStampConsole("**** ZipView: " + productVersion
+				+ " Start OS: " + System.getProperty("os.name") + "  "
+				+ System.getProperty("os.version") + " ");
+		menuBar = new JMenuBar();
+		fileMenu = new JMenu("File");
+		editMenu = new JMenu("Edit");
+		viewMenu = new JMenu("View");
+		helpMenu = new JMenu("Help");
+
+		createItem = new JMenuItem("New Zip Archive");
+		openItem = new JMenuItem("Open");
+		saveAsZipItem = new JMenuItem("Save As Zip");
+		saveItem = new JMenuItem("Save Encrypted");
+		closeItem = new JMenuItem("Close");
+		closeAndLockItem = new JMenuItem("Close and Lock");
+		exitItem = new JMenuItem("Exit");
+
+		addToRegexItem = new JMenuItem("Add to Regex");
+		extractItem = new JMenuItem("Extract");
+		nextRangeItem = new JMenuItem("Next 100");
+		prevRangeItem = new JMenuItem("Prev 100");
+
+		preferencesItem = new JMenuItem("Preferences");
+
+		thumbsItem = new JMenuItem("Show Thumbnails");
+		dirViewItem = new JMenuItem("List All Files");
+		originalSizeItem = new JMenuItem("Original Size");
+		bestfitItem = new JMenuItem("Best fit");
+		absfitItem = new JMenuItem("Absolute fit");
+		fastItem = new JMenuItem("Fast Image Load (Animation)");
+		smoothItem = new JMenuItem("Smooth Image Load");
+		viewItem = new JMenuItem("View File");
+		fullScreenItem = new JMenuItem("Full Window Slide");
+		previewItem = new JMenuItem("Show Preview");
+		logoItem = new JMenuItem("Hide Info");
+		slideItem = new JMenuItem("Start Slide show");
+		jumpLeftItem = new JMenuItem("Jump Left");
+		jumpRightItem = new JMenuItem("Jump Right");
+		loopItem = new JMenuItem("Turn looping");
+		consoleItem = new JMenuItem("Debug Console");
+
+		helpItem = new JMenuItem("Help Contents");
+		regexHelpItem = new JMenuItem("Java Regular Expression Doc");
+		aboutItem = new JMenuItem("About");
+
+		deleteItem = new JMenuItem("Delete");
+		renameItem = new JMenuItem("Rename");
+		extractAllItem = new JMenuItem("Extract All");
+		addItem = new JMenuItem("Add File");
+		picItem = new JMenuItem("Show Image");
+		browserItem = new JMenuItem("Show Browser");
+
+		ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+		gd = ge.getDefaultScreenDevice();
+
+		listPanel = new JPanel();
+
+		previewLabel = new JLabel();
+		picLabel = new JLabel();
+		regexField = new JTextField(50);
+		regexField.setFont(new Font("Monospaced", Font.BOLD, 12));
+		regEx = new RE();
+		regStr = ".*.*";
+		regEx.setPattern(regStr);
+		regexField.setText(".*.*");
+		regExList.add(regStr);
+		regExList.add(".*.*[^/]");
+		regExList.add(".*.*\\.((jpg)|(png)|(gif))");
+		regExList.add(".*.*\\.((txt)|(html)|(htm)|(rtf))");
+		patternList = new JComboBox();
+		for (int i = 0; i < regExList.size(); i++) {
+			patternList.addItem(regExList.get(i));
+		}
+		// patternList.setEditable(true);
+		patternList.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				regStr = (String) patternList.getSelectedItem();
+				regEx.setPattern(regStr);
+				int indx = regExList.indexOf(regStr);
+				if (indx != -1) {
+					regExList.remove(indx);
+				}
+				regExList.addFirst(regStr);
+				updateFileList(curDir);
+				patternList.removeAllItems();
+				for (int i = 0; i < regExList.size(); i++) {
+					patternList.addItem(regExList.get(i));
+				}
+				// patternList.setSelectedItem(regStr);
+				patternList.setEditable(false);
+				patternList.transferFocusUpCycle();
+			}
+		});
+
+		chooser = new JFileChooser();
+
+		bPanel = new BrowserPanel();
+		bPanel.westPanel.setLayout(new BorderLayout());
+		bPanel.westPanel.setOpaque(true);
+		bPanel.westPanel.setBackground(new Color(145, 160, 255));
+		bPanel.westPanel
+				.setToolTipText("To hide this info-bar click View >> Hide Info");
+		bPanel.westPanel.add(previewLabel, BorderLayout.SOUTH);
+		infoLabel = new JLabel(
+				"<html><h1>&nbsp;ZipView&nbsp;</h1><br/><br/>&nbsp;Files: "
+						+ totalFiles + "<br/><br>&nbsp;Size: " + totalSize
+						+ "</html>");
+		bPanel.westPanel.add(infoLabel, BorderLayout.NORTH);
+		bPanel.northPanel.setLayout(new BorderLayout());
+		bPanel.northPanel.add(new JLabel("RegEx: "), BorderLayout.WEST);
+		// bPanel.northPanel.add(regexField, BorderLayout.CENTER);
+		bPanel.northPanel.add(patternList, BorderLayout.CENTER);
+		createItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N,
+				InputEvent.CTRL_MASK));
+		createItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				createOperation();
+			}
+		});
+		nextRangeItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_G,
+				InputEvent.CTRL_MASK));
+		nextRangeItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				showRange(high_lim);
+			}
+		});
+		prevRangeItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_H,
+				InputEvent.CTRL_MASK));
+		prevRangeItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				int val = low_lim - 100;
+				if (low_lim >= 0) {
+					showRange(val);
+				}
+			}
+		});
+		openItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O,
+				InputEvent.CTRL_MASK));
+		openItem.addActionListener(new OpenAction());
+		saveAsZipItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				if (zipname == null) {
+					return;
+				}
+				String filepath = null;
+				// JFileChooser chooser = new JFileChooser();
+				chooser.setCurrentDirectory(new File("."));
+				ExtensionFileFilter filter = new ExtensionFileFilter();
+				// filter.addExtension(".zip");
+				// filter.addExtension(".jar");
+				filter.addExtension(".csj");
+				filter.setDescription("CSJ archives");
+				chooser.setDialogTitle("Save Zip Copy");
+				chooser.setFileFilter(filter);
+				chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+				int r = chooser.showSaveDialog(ZipViewFrame.this);
+				if (r == JFileChooser.APPROVE_OPTION) {
+					try {
+						filepath = chooser.getSelectedFile().getPath();
+						FileInputStream fin = new FileInputStream(zipname);
+						FileOutputStream fout = new FileOutputStream(filepath);
+						StreamCopier.copy(fin, fout);
+						fin.close();
+						fout.close();
+					} catch (Exception e) {
+						System.out.println("Exception: saveAsZip: " + e);
+						e.printStackTrace();
+					}
+				}
+			}
+		});
+
+		saveItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				if (zipname == null) {
+					return;
+				}
+				String filepath;
+				String pw = null;
+				while (true) {
+					char cpw[] = SujOption.showPasswordDialog(
+							"Enter password:", "Password", "pass");
+					if (cpw == null) { // operation cancelled by user
+						return;
+					} else if (cpw.length < 8) {// very important
+						JOptionPane.showOptionDialog(null, new JLabel(
+								"Password must be atleast 8 characters long."),
+								"Dangerous Password",
+								JOptionPane.DEFAULT_OPTION,
+								JOptionPane.ERROR_MESSAGE, wizardIcon, null,
+								null);
+						continue;
+					}
+					if (cpw != null) {
+						pw = new String(cpw);
+						break; // proceed processing with the pwsd
+					}
+				}
+				// JFileChooser chooser = new JFileChooser();
+				chooser.setCurrentDirectory(new File("."));
+				ExtensionFileFilter filter = new ExtensionFileFilter();
+				// filter.addExtension(".zip");
+				// filter.addExtension(".jar");
+				filter.addExtension(".csj");
+				filter.setDescription("CSJ archives");
+				chooser.setDialogTitle("Save Encrypted Copy");
+				chooser.setFileFilter(filter);
+				chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+				int r = chooser.showSaveDialog(ZipViewFrame.this);
+				if (r == JFileChooser.APPROVE_OPTION) {
+					filepath = chooser.getSelectedFile().getPath();
+					if (!(new File(filepath)).exists()
+							&& !filepath.endsWith(".csj")) {
+						filepath += ".csj";
+					}
+					if (!Crypto.encrypt(zipname, filepath, pw)) {
+						JOptionPane.showOptionDialog(null, new JLabel(
+								"Error encrypting file."), "Error!",
+								JOptionPane.DEFAULT_OPTION,
+								JOptionPane.ERROR_MESSAGE, wizardIcon, null,
+								null);
+					}
+				}
+			}
+		});
+
+		closeItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_W,
+				InputEvent.CTRL_MASK));
+		closeItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				closeArchive();
+			}
+		});
+
+		closeAndLockItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				lockArchive();
+			}
+		});
+
+		exitItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_X,
+				InputEvent.ALT_MASK));
+		exitItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				closeApp();
+			}
+		});
+		logoItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				// showLogo = !showLogo;
+				setShowLogo(!showLogo);
+			}
+		});
+		/*
+		 * addToRegexItem.addActionListener(new ActionListener() { public void
+		 * actionPerformed(ActionEvent event) { int row = selectedIndex; String
+		 * filepath = null; if (row == -1) { JOptionPane.showMessageDialog(null,
+		 * "Select an file first. Row = " + row, "No file selected!",
+		 * JOptionPane.ERROR_MESSAGE); return; } String name = (String)
+		 * fileList.get(row); regexField.setText(regexField.getText() + "|(" +
+		 * name + ")"); } });
+		 */
+		addToRegexItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				addToRegExOpr();
+			}
+		});
+
+		extractItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				int row = selectedIndex;
+				if (row == -1) {
+					JOptionPane.showMessageDialog(null,
+							"Select a file first. Row = " + row,
+							"No file selected!", JOptionPane.ERROR_MESSAGE);
+					return;
+				}
+				String name = (String) fileList.get(row);
+				extractOperation(name);
+
+			}
+		});
+
+		preferencesItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				String delayStr = (String) JOptionPane.showInputDialog(null,
+						"Enter slide delay: (Current value: " + slideDelay,
+						"Preferences", JOptionPane.QUESTION_MESSAGE,
+						/*
+						 * new
+						 * ImageIcon(CBSession.class.getResource("/sujan/eye.gif"))
+						 */null, null, null);
+				try {
+					int delay = Integer.parseInt(delayStr);
+					slideDelay = delay;
+				} catch (Exception e) {
+					System.out.println("Exception at slideDelay set" + e);
+				}
+
+			}
+		});
+		loopItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				isLoop = !isLoop;
+				if (isLoop) {
+					loopItem.setText("Turn looping OFF");
+				} else {
+					loopItem.setText("Turn looping ON");
+				}
+			}
+		});
+
+		originalSizeItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				zoomSmall = false;
+				bestfit = false;
+				originalSizeItem.setEnabled(false);
+				bestfitItem.setEnabled(true);
+				absfitItem.setEnabled(true);
+				// loadImage();
+				if (selectedIndex >= 0) {
+					String name = fileList.get(selectedIndex);
+					if (name != null && !name.endsWith("/")) {
+						loadEntry(name);
+					}
+				}
+			}
+		});
+
+		bestfitItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				zoomSmall = false;
+				bestfit = true;
+				originalSizeItem.setEnabled(true);
+				bestfitItem.setEnabled(false);
+				absfitItem.setEnabled(true);
+				// loadImage();
+				if (selectedIndex >= 0) {
+					String name = fileList.get(selectedIndex);
+					if (name != null && !name.endsWith("/")) {
+						loadEntry(name);// loadImage();
+					}
+				}
+			}
+		});
+
+		absfitItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				zoomSmall = true;
+				bestfit = true;
+				originalSizeItem.setEnabled(true);
+				bestfitItem.setEnabled(true);
+				absfitItem.setEnabled(false);
+				// loadImage();
+				if (selectedIndex >= 0) {
+					String name = fileList.get(selectedIndex);
+					if (name != null && !name.endsWith("/")) {
+						loadEntry(name);// loadImage();
+					}
+				}
+			}
+		});
+		smoothItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				slideScaleType = Image.SCALE_SMOOTH;
+				fastItem.setEnabled(true);
+				smoothItem.setEnabled(false);
+				absfitItem.setEnabled(true);
+				if (selectedIndex >= 0) {
+					String name = fileList.get(selectedIndex);
+					if (name != null && !name.endsWith("/")) {
+						loadEntry(name);
+					}
+				}
+			}
+		});
+		fastItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				slideScaleType = Image.SCALE_FAST;
+				fastItem.setEnabled(false);
+				smoothItem.setEnabled(true);
+				if (selectedIndex >= 0) {
+					String name = fileList.get(selectedIndex);
+					if (name != null && !name.endsWith("/")) {
+						loadEntry(name);
+					}
+				}
+			}
+		});
+		viewItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_I,
+				InputEvent.CTRL_MASK));
+		viewItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				viewImage();
+			}
+		});
+
+		previewItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				setShowPreview(!showPreview);
+				if (showPreview) {
+					previewItem.setText("Hide Preview");
+				} else {
+					previewItem.setText("Show Preview");
+				}
+			}
+		});
+
+		fullScreenItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F,
+				InputEvent.CTRL_MASK));
+		fullScreenItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				setFullScreen();
+			}
+		});
+		thumbsItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				setShowThumbnails(!showThumbnails);
+			}
+		});
+		dirViewItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				dirView = !dirView;
+				if (dirView) {
+					dirViewItem.setText("List All Files");
+				} else {
+					dirViewItem.setText("Hierarchal View");
+				}
+				updateFileList(null);
+			}
+		});
+		// jumpLeftItem.setAccelerator(KeyStroke.getKeyStroke(
+		// KeyEvent.VK_PAGE_UP, 0));//VK_J, InputEvent.CTRL_MASK));
+		jumpLeftItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				if (selectedIndex == -1) {
+					System.out.println("selectedIndex == -1");
+					return;
+				}
+				if (selectedIndex - 1 >= 0) {
+					selectedIndex -= 1;
+				}
+				setHighLighted(selectedIndex);
+				String str = (String) fileList.get(selectedIndex);
+				if (!str.endsWith("/")) {
+					loadEntry(str);
+				}
+				/*
+				 * boolean running = false; if (!slideStopped) { running = true; }
+				 * //stopSlideShow(); slideStopped = true; for (int i=0; (t !=
+				 * null && t.getState() != Thread.State.TERMINATED) && i < 10;
+				 * i++) { try { Thread.sleep(slideDelay); } catch(Exception e) {
+				 * System.out.println("Cannot sleep"); } }
+				 * 
+				 * if (running) { if (selectedIndex - jumpIncr >= 0) {
+				 * selectedIndex -= jumpIncr; } startSlideShow(); } else { if
+				 * (selectedIndex - 1 >= 0) { selectedIndex -= 1; }
+				 * setHighLighted(selectedIndex); String str = (String)
+				 * fileList.get(selectedIndex); if (!str.endsWith("/")) {
+				 * loadEntry(str); } }
+				 */
+			}
+		});
+
+		// jumpRightItem.setAccelerator(KeyStroke.getKeyStroke(
+		// KeyEvent.VK_PAGE_DOWN, 0));//VK_K, InputEvent.CTRL_MASK));
+		jumpRightItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				if (selectedIndex == -1) {
+					System.out.println("selectedIndex == -1");
+					return;
+				}
+				if (selectedIndex + 1 < fileList.size()) {
+					selectedIndex += 1;
+				}
+				setHighLighted(selectedIndex);
+				String str = (String) fileList.get(selectedIndex);
+				if (!str.endsWith("/")) {
+					loadEntry(str);
+				}
+
+				/*
+				 * boolean running = false; if (!slideStopped) { running = true; }
+				 * //stopSlideShow(); slideStopped = true; for (int i=0; (t !=
+				 * null && t.getState() != Thread.State.TERMINATED) && i < 10;
+				 * i++) { try { Thread.sleep(slideDelay); } catch(Exception e) {
+				 * System.out.println("Cannot sleep");} }
+				 * 
+				 * if (running) { if (selectedIndex + jumpIncr <
+				 * fileList.size()) { selectedIndex += jumpIncr; }
+				 * startSlideShow(); } else { if (selectedIndex + 1 <
+				 * fileList.size()) { selectedIndex += 1; }
+				 * setHighLighted(selectedIndex); String str = (String)
+				 * fileList.get(selectedIndex); if (!str.endsWith("/")) {
+				 * loadEntry(str); } }
+				 */
+			}
+		});
+
+		slideItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F11, 0));
+		slideItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				if (!archiveOpen)
+					return;
+				if (slideStopped) {
+					slideStopped = false;
+					slideItem.setText("Stop Slide Show");
+					String filepath = null;
+					if (selectedIndex == -1) {
+						slideStopped = true;
+						JOptionPane.showMessageDialog(null,
+								"Select an file first. Row = " + selectedIndex,
+								"No file selected!", JOptionPane.ERROR_MESSAGE);
+						return;
+					}
+					startSlideShow();
+
+				} else {
+					slideStopped = true;
+					slideItem.setText("Start Slide Show");
+				}
+			}
+		});
+
+		consoleItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_D,
+				InputEvent.CTRL_MASK));
+		consoleItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				SujOption.showConsole();
+			}
+		});
+
+		helpItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0));
+		helpItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				/*
+				 * JScrollPane hScrollPane = new JScrollPane(
+				 * SujOption.createEditorPane(
+				 * ZipView.class.getResource("/com/sujan/res/doc/ZipViewHelp.html")));
+				 * JFrame showFrame = new JFrame("ZipView Help");
+				 * showFrame.setIconImage(sujanTinyIcon.getImage());
+				 * showFrame.add(hScrollPane, BorderLayout.CENTER);
+				 * showFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+				 * //Display the window. //showFrame.pack();
+				 * showFrame.setSize(800, 600); showFrame.setLocation(locX,
+				 * locY); System.gc(); showFrame.setVisible(true);
+				 */
+				showHelpFrame();
+				return;
+			}
+		});
+
+		regexHelpItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				JScrollPane hScrollPane = new JScrollPane(SujOption
+						.createEditorPane(ZipView.class
+								.getResource("/com/sujan/res/Pattern.html")));
+				JFrame showFrame = new JFrame("Regular Expression Help");
+				showFrame.setIconImage(sujanTinyIcon.getImage());
+				showFrame.add(hScrollPane, BorderLayout.CENTER);
+				showFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+				// Display the window.
+				// showFrame.pack();
+				showFrame.setSize(800, 600);
+				showFrame.setLocation(locX, locY);
+				showFrame.setVisible(true);
+				System.gc();
+				return;
+			}
+		});
+
+		aboutItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				JOptionPane
+						.showOptionDialog(
+								null,
+								new JLabel(
+										"<html><center>Crisbox</center><h1><center>ZipView</center></h1>"
+												+ "<center>ver26OCT2007</center> <br/>"
+												+ "Developed by: Sujan S A <br/>"
+												+ "For updates/enquiry <br/>e-mail: <font color=\"blue\">messagesujan@yahoo.co.in</font>"
+												+ "<br/>Tel: +91 9964670717<br/><br/><center></center></html>"),
+								"About ZipView", JOptionPane.DEFAULT_OPTION,
+								JOptionPane.ERROR_MESSAGE, sujanIcon, null,
+								null);
+			}
+		});
+
+		fileMenu.add(createItem);
+		fileMenu.add(openItem);
+		fileMenu.addSeparator();
+		fileMenu.add(saveAsZipItem);
+		fileMenu.add(saveItem);
+		fileMenu.add(closeAndLockItem);
+		fileMenu.add(closeItem);
+		fileMenu.addSeparator();
+		fileMenu.add(exitItem);
+
+		viewMenu.add(thumbsItem);
+		viewMenu.addSeparator();
+		viewMenu.add(dirViewItem);
+		viewMenu.addSeparator();
+		viewMenu.add(originalSizeItem);
+		viewMenu.add(bestfitItem);
+		viewMenu.add(absfitItem);
+		viewMenu.addSeparator();
+		viewMenu.add(fastItem);
+		viewMenu.add(smoothItem);
+		viewMenu.addSeparator();
+
+		viewMenu.add(slideItem);
+		viewMenu.add(jumpLeftItem);
+		viewMenu.add(jumpRightItem);
+		viewMenu.add(loopItem);
+		viewMenu.addSeparator();
+
+		viewMenu.add(viewItem);
+		viewMenu.add(previewItem);
+		viewMenu.add(logoItem);
+		viewMenu.add(fullScreenItem);
+		viewMenu.addSeparator();
+
+		viewMenu.add(consoleItem);
+
+		editMenu.add(addToRegexItem);
+		// editMenu.add(addItem);
+		editMenu.add(extractItem);
+		// editMenu.add(nextRangeItem);
+		// editMenu.add(prevRangeItem);
+		// editMenu.add(extractAllItem);
+		// editMenu.add(renameItem);
+		// editMenu.add(deleteItem);
+		editMenu.add(preferencesItem);
+
+		helpMenu.add(helpItem);
+		helpMenu.addSeparator();
+		helpMenu.add(regexHelpItem);
+		helpMenu.add(aboutItem);
+
+		menuBar.add(fileMenu);
+		menuBar.add(editMenu);
+		menuBar.add(viewMenu);
+		menuBar.add(helpMenu);
+		setJMenuBar(menuBar);
+
+		/*
+		 * listPanel.addKeyListener(new KeyAdapter() { public void
+		 * keyPressed(KeyEvent event) { //int kc = event.getKeyCode();
+		 * //System.out.println(kc); } public void keyReleased(KeyEvent event) {
+		 * //int kc = event.getKeyCode(); //System.out.println(kc);} public void
+		 * keyTyped(KeyEvent event) { //int kc = event.getKeyCode();
+		 * //System.out.println(kc);} });
+		 */
+
+		this.addKeyListener(new KeyAdapter() {
+			public void keyPressed(KeyEvent event) {
+				int kc = event.getKeyCode();
+				// System.out.println(kc);
+				if (kc == KeyEvent.VK_UP) {
+					jumpLeft();
+				}
+				if (kc == KeyEvent.VK_DOWN) {
+					jumpRight();
+				}
+				if (kc == KeyEvent.VK_ESCAPE) {
+					stopSlideShow();
+					picLabel.setIcon(null);
+					setShowThumbnails(false);
+					// updateListPanel(showThumbnails);
+					setDefaultTitle("ZipView");
+				} else if (kc == KeyEvent.VK_PAGE_DOWN) {
+					JScrollBar sb = listScrollPane.getVerticalScrollBar();
+					int v = sb.getValue();
+					int m = sb.getMaximum();
+					if (v + block_scroll < m) {
+						sb.setValue(v + block_scroll);
+						decorateAround(recentTouch, thumbs_hr);
+						recentTouch += thumbs_hr;
+					}
+				} else if (kc == KeyEvent.VK_PAGE_UP) {
+					JScrollBar sb = listScrollPane.getVerticalScrollBar();
+					int v = sb.getValue();
+					int m = sb.getMinimum();
+					if (v - block_scroll > m) {
+						sb.setValue(v - block_scroll);
+						decorateAround(recentTouch, thumbs_hr);
+						recentTouch -= thumbs_hr;
+					}
+				}
+
+			}
+
+			public void keyReleased(KeyEvent event) {
+				// int kc = event.getKeyCode();
+				// System.out.println(kc);
+			}
+
+			public void keyTyped(KeyEvent event) {
+				// int kc = event.getKeyCode();
+				// System.out.println(kc);
+
+			}
+		});
+
+		listScrollPane = new JScrollPane(listPanel);
+
+		listScrollPane.setViewportView(listPanel);
+		listScrollPane
+				.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
+		bPanel.add(listScrollPane, BorderLayout.CENTER);
+		popup = new JPopupMenu();
+		JMenuItem menuItem = new JMenuItem("Add to RegEx");
+		menuItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				addToRegExOpr();
+			}
+		});
+
+		popup.add(menuItem);
+		menuItem = new JMenuItem("View File");
+		menuItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				// System.out.println("View File");
+				loadZipFile(selectedEntryName);
+			}
+		});
+		popup.add(menuItem);
+		menuItem = new JMenuItem("Extract");
+		menuItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				// System.out.println("Extract File");
+				extractOperation(selectedEntryName);
+			}
+		});
+		popup.add(menuItem);
+		menuItem = new JMenuItem("Properties");
+		menuItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				// System.out.println("Properties");
+				ImageIcon ic;
+				String name = fileList.get(selectedIndex);
+				String str = name.toLowerCase();
+				if (str.compareTo("../") == 0) {
+					System.out
+							.println("Attempted to view prop. of parent dir link. TODO");
+					return;
+				} else if (str.endsWith("/")) {
+					ic = largeDirIcon;
+				} else if (str.endsWith(".jpg") || str.endsWith(".gif")
+						|| str.endsWith(".png")) {
+					ic = largeImageIcon;
+				} else if (str.endsWith(".mp3") || str.endsWith(".wma")
+						|| str.endsWith(".wav") || str.endsWith(".au")
+						|| str.endsWith(".rm") || str.endsWith(".mp4")
+						|| str.endsWith(".mpg") || str.endsWith(".mpeg")
+						|| str.endsWith(".wmv")) {
+					ic = largeMediaIcon;
+				} else if (str.endsWith(".exe")) {
+					ic = largeExeIcon;
+				} else {
+					ic = largeWhiteFileIcon;
+				}
+				ZipEntry ze = (ZipEntry) entries.get(name);
+
+				JOptionPane
+						.showOptionDialog(
+								null,
+								new JLabel(
+										"<html><h1>"
+
+												+ "</h1><table border = \"0\">"
+												+ "<tr><td>Name: </td><td>"
+												+ ze.getName()/* not str */
+												+ "</td></tr>"
+												+ "<tr><td>Type: </td><td>"
+												+ (ze.isDirectory() ? "Directory"
+														: "File")
+												+ "</td></tr>"
+												+ "<tr><td>Date Modified: &nbsp;&nbsp;&nbsp;&nbsp;</td><td>"
+												+ (new Date(ze.getTime()))
+														.toString()
+												+ "</td></tr>"
+												+ "<tr><td>Size: </td><td>"
+												+ ze.getSize()
+												+ "</td></tr>"
+												+ "</table><hr/><table>"
+												+ "<tr><td>Compressed Size: </td><td>"
+												+ ze.getCompressedSize()
+												+ "</td></tr>"
+
+												+ "<tr><td>Method: </td><td>"
+												+ ze.getMethod()
+												+ "</td></tr>"
+												+ "<tr><td>CRC: </td><td>"
+												+ ze.getCrc()
+												+ "</td></tr>"
+												+ "<tr><td>Comment: </td><td>"
+												+ ze.getComment()
+												+ "</td></tr>"
+												+ "</table><hr/>"
+												+ "<br/><br/><br/><p>Size of directories not calculated. "
+												+ "To get the latest edition of "
+												+ productName
+												+ " <br/>e-mail: messagesujan@yahoo.co.in</p>"
+												+ "<br/><br/><br/><br/></html>"),
+								"Properties", JOptionPane.DEFAULT_OPTION,
+								JOptionPane.ERROR_MESSAGE, ic, null, null);
+			}
+		});
+		popup.add(menuItem);
+		picLabel.setOpaque(true);
+		picLabel.setBackground(Color.black);
+		picLabel.setForeground(Color.green);
+		picLabel.setHorizontalAlignment(JLabel.CENTER);
+		picLabel.setVerticalAlignment(JLabel.CENTER);
+
+		pictureScrollPane = new JScrollPane(picLabel);
+		splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, bPanel,
+				pictureScrollPane);
+		splitPane.setOneTouchExpandable(true);
+		splitPane.setDividerLocation(250);
+
+		add(splitPane, BorderLayout.CENTER);
+
+		regexField.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent event) {
+				if (!archiveOpen)
+					return;
+				regStr = regexField.getText();
+				regEx.setPattern(regStr);
+				updateFileList(curDir);
+				// regexField.setEnabled(false);
+			}
+		});
+		regexField.addMouseListener(new MouseListener() {
+			public void mouseClicked(MouseEvent e) {
+
+			}
+
+			public void mouseEntered(MouseEvent e) {
+				regexField.setEnabled(true);
+			}
+
+			public void mouseExited(MouseEvent e) {
+				regexField.setEnabled(false);
+				regexField.transferFocusUpCycle();
+			}
+
+			public void mousePressed(MouseEvent e) {
+
+			}
+
+			public void mouseReleased(MouseEvent e) {
+
+			}
+		});
+		patternList.addMouseListener(new MouseListener() {
+			public void mouseClicked(MouseEvent e) {
+				patternList.setEditable(true);
+			}
+
+			public void mouseEntered(MouseEvent e) {
+				// patternList.setEditable(true);
+			}
+
+			public void mouseExited(MouseEvent e) {
+				// patternList.setEditable(false);
+				// patternList.transferFocusUpCycle();
+			}
+
+			public void mousePressed(MouseEvent e) {
+
+			}
+
+			public void mouseReleased(MouseEvent e) {
+
+			}
+		});
+		enableGUI(false);
+		System.out.println("ZipView Application initialized successfully.");
+		picLabel.setIcon(defaultImage);
+		pictureScrollPane.validate();
+		int h = pictureScrollPane.getHeight() - 5;
+		int w = pictureScrollPane.getWidth() - 5;
+		picLabel.setIcon(SujOption.getBestfit(defaultImage, w, h, true, false,
+				Image.SCALE_FAST));
+		// End of GUI creation
+		// picLabel.setIcon(null);
+		this.setVisible(true);
+		showTip();
+	}
+
+	public void jumpRight() {
+		if (selectedIndex == -1) {
+			System.out.println("selectedIndex == -1");
+			return;
+		}
+		if (selectedIndex + 1 < fileList.size()) {
+			selectedIndex += 1;
+		}
+		setHighLighted(selectedIndex);
+		String str = (String) fileList.get(selectedIndex);
+		if (!str.endsWith("/")) {
+			loadEntry(str);
+		}
+
+	}
+
+	void jumpLeft() {
+		if (selectedIndex == -1) {
+			System.out.println("selectedIndex == -1");
+			return;
+		}
+		if (selectedIndex - 1 >= 0) {
+			selectedIndex -= 1;
+		}
+		setHighLighted(selectedIndex);
+		String str = (String) fileList.get(selectedIndex);
+		if (!str.endsWith("/")) {
+			loadEntry(str);
+		}
+	}
+
+	public void setShowLogo(boolean flag) {
+		showLogo = flag;
+		if (!showLogo) {
+			bPanel.remove(bPanel.westPanel);
+			logoItem.setText("Show Info");
+		} else {
+			bPanel.add(bPanel.westPanel, BorderLayout.WEST);
+			logoItem.setText("Hide Info");
+		}
+		bPanel.validate();
+	}
+
+	public void extractOperation(String name) {
+		String filepath = null;
+
+		chooser.setCurrentDirectory(new File("."));
+		// ExtensionFileFilter filter = new ExtensionFileFilter();
+		chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+		chooser.setDialogTitle("Extract " + name);
+		int r = chooser.showSaveDialog(ZipViewFrame.this);
+		if (r == JFileChooser.APPROVE_OPTION) {
+			filepath = chooser.getSelectedFile().getPath();
+			extract(name, filepath);
+		}
+	}
+
+	void extract(String name, String dirName) {
+		String[] list = (String[]) entries.keySet().toArray(new String[0]);
+		File currentDir = new File(dirName);
+		Arrays.sort(list);
+		int i;
+		for (i = 0; i < list.length; i++) {
+			if (list[i].endsWith("/") && name.indexOf(list[i]) > -1) {
+				currentDir = new File(dirName, list[i]);
+				currentDir.mkdirs();
+			} else if (list[i].startsWith(name)) {
+				if (list[i].endsWith("/")) {
+					currentDir = new File(dirName, list[i]);
+					currentDir.mkdirs();
+				} else {
+					int index = list[i].lastIndexOf("/");
+					String dir = list[i].substring(0, index);
+					extractFile(list[i], (new File(dirName, dir)).getPath());
+					// extractFile(list[i], currentDir.getPath());
+				}
+			}
+		}
+	}
+
+	void extractFile(String name, String filepath) {
+		try {
+			ZipEntry entry;
+			if ((entry = (ZipEntry) entries.get(name)) != null) {
+				if (entry.getName().equals(name)) {
+					int index = name.lastIndexOf("/");
+					String filename = name.substring(index + 1);
+					InputStream zin = source.getInputStream(entry);
+					File dir = new File(filepath);
+					File file = new File(dir, filename);
+					file.createNewFile();
+					FileOutputStream fout = new FileOutputStream(file);
+					StreamCopier.copy(zin, fout);
+					fout.close();
+					zin.close();
+				}
+			}
+		} catch (IOException e) {
+			System.out.println("Exception: extractFile() failed: " + e);
+			e.printStackTrace();
+		} catch (Exception e) {
+			System.out.println("Exception: extractFile() failed: " + e);
+			e.printStackTrace();
+		}
+	}
+
+	public void setFullScreen() {
+		splitPane.setResizeWeight(0.0);
+		fullScreenMode = !fullScreenMode;
+		if (fullScreenMode) {
+			/*
+			 * try {
+			 * UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName()); }
+			 * catch ( Exception e) { e.printStackTrace(); }
+			 */
+			// menuBar.setVisible(false);
+			// splitPane.setDividerLocation(1);
+			fullScreenItem.setText("Exit Full Window Slide");
+			// gd.setFullScreenWindow(this);
+			setShowLogo(false);
+			splitPane.setDividerLocation(1);
+		} else {
+			/*
+			 * try {
+			 * UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
+			 * catch ( Exception e) { e.printStackTrace(); }
+			 */
+			// menuBar.setVisible(true);
+			splitPane.setDividerLocation(200);
+			fullScreenItem.setText("Full Window Slide");
+			// gd.setFullScreenWindow(null);
+		}
+	}
+
+	void createOperation() {
+		System.out.println("Create operation");
+		String sourcePath = null;
+		String destPath = null;
+		chooser.setCurrentDirectory(new File("."));
+		// ExtensionFileFilter filter = new ExtensionFileFilter();
+		chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+		chooser.setDialogTitle("Create Zip Archive ");
+		chooser.setApproveButtonText("Select");// no effect
+		chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
+		int r = chooser.showSaveDialog(ZipViewFrame.this);
+		if (r == JFileChooser.APPROVE_OPTION) {
+			sourcePath = chooser.getSelectedFile().getPath();
+			chooser.setCurrentDirectory(new File("."));
+			ExtensionFileFilter filter = new ExtensionFileFilter();
+			filter.addExtension(".zip");
+			// filter.addExtension(".jar");
+			// filter.addExtension(".csj");
+			filter.setDescription("ZIP archives");
+			chooser.setDialogTitle("Save Zip");
+			chooser.setFileFilter(filter);
+			chooser.setApproveButtonText("Create");
+			chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+			int res = chooser.showSaveDialog(ZipViewFrame.this);
+			if (res == JFileChooser.APPROVE_OPTION) {
+				destPath = chooser.getSelectedFile().getPath();
+				if (!destPath.toLowerCase().endsWith(".zip")) {
+					destPath += ".zip";
+				}
+				createArchive(new File(sourcePath), new File(destPath));
+			}
+		}
+	}
+
+	void createArchive(File dir, File file) {
+		File[] myList = SujOption.fullList(dir);
+		try {
+			FileOutputStream fos = new FileOutputStream(file);
+			ZipOutputStream zout = new ZipOutputStream(fos);
+			if (myList[0].isDirectory()) {
+				ZipEntry ze = new ZipEntry(myList[0].getName() + "/");
+				zout.putNextEntry(ze);
+			} else {
+				ZipEntry ze = new ZipEntry(myList[0].getName());
+				zout.putNextEntry(ze);
+			}
+			// if directory then
+			int dirLen = dir.getPath().length();
+			for (int i = 1/* beware */; i < myList.length; i++) {
+				String path = myList[i].getPath();
+				// System.out.println("working: " + path);
+				String shortPath = myList[0].getName() + "/"
+						+ (path.substring(dirLen + 1)).replace('\\', '/'); // deal
+				// with
+				// Windows
+				// path
+				// sep.
+				System.out.println("Writing: " + shortPath);
+				if (myList[i].isDirectory()) {
+					ZipEntry ze = new ZipEntry(shortPath + "/");
+					zout.putNextEntry(ze);
+				} else {
+					ZipEntry ze = new ZipEntry(shortPath);
+					zout.putNextEntry(ze);
+					FileInputStream fin = new FileInputStream(myList[i]);
+					StreamCopier.copy(fin, zout);
+					fin.close();
+				}
+				zout.closeEntry();
+			}
+			zout.close();
+		} catch (Exception e) {
+			System.out.println("Exception:  : " + e);
+			e.printStackTrace();
+		}
+	}
+
+	private class OpenAction implements ActionListener {
+		public void actionPerformed(ActionEvent event) {
+			if (archiveOpen) {
+				JOptionPane.showOptionDialog(null, new JLabel(
+						"A file is open already."), "Open failed!",
+						JOptionPane.DEFAULT_OPTION, JOptionPane.ERROR_MESSAGE,
+						wizardIcon, null, null);
+				return;
+			}
+			String pw = null;
+			File tmpFile = null;
+			// JFileChooser chooser = new JFileChooser();
+			chooser.setCurrentDirectory(new File("."));
+			ExtensionFileFilter filter = new ExtensionFileFilter();
+			filter.addExtension(".zip");
+			filter.addExtension(".jar");
+			filter.addExtension(".csj");
+			filter.addExtension(".zsj");
+			filter.setDescription("ZIP archives");
+			chooser.setFileFilter(filter);
+			chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+			int r = chooser.showOpenDialog(ZipViewFrame.this);
+			if (r == JFileChooser.APPROVE_OPTION) {
+				arcname = chooser.getSelectedFile().getPath();
+				if (arcname.endsWith(".csj")) {
+					char cpw[] = SujOption.showPasswordDialog(
+							"Enter password to open the encrypted file:",
+							"Password", "pass");
+					if (cpw != null) {
+						pw = new String(cpw);
+					}
+					if (pw == null || pw.length() < 8) {// very important
+						JOptionPane.showOptionDialog(null, new JLabel(
+								"Password must be atleast 8 characters long."),
+								"Dangerous Password",
+								JOptionPane.DEFAULT_OPTION,
+								JOptionPane.ERROR_MESSAGE, wizardIcon, null,
+								null);
+						return;
+					}
+					try {
+						tmpFile = File.createTempFile("zipview", ".tsj",
+								new File("."));
+						tmpFile.deleteOnExit();
+					} catch (IOException e) {
+						System.out.println(e);
+						return;
+					}
+
+					if (!Crypto.decrypt(arcname, tmpFile.getPath(), pw)) {
+						JOptionPane.showOptionDialog(null, new JLabel(
+								"Incorrect Password."), "Incorrect Password",
+								JOptionPane.DEFAULT_OPTION,
+								JOptionPane.ERROR_MESSAGE, wizardIcon, null,
+								null);
+						return;
+					} else {
+						zipname = tmpFile.getPath();
+					}
+				} else {
+					zipname = arcname;
+				}
+
+				if (unlock(zipname) == OPR_OK) {
+					try {
+						openMap(zipname);
+						scanZipFile("");
+						archiveOpen = true;
+						enableGUI(true);
+					} catch (Exception e) {
+						String msgName = "Error!";
+						String msg = "While reading zip file. " + e;
+						System.out.println(msgName + " : " + msg);
+						JOptionPane.showOptionDialog(null, new JLabel(msg),
+								msgName, JOptionPane.DEFAULT_OPTION,
+								JOptionPane.ERROR_MESSAGE, null, null, null);
+					}
+				}
+			}
+		}
+	}
+
+	public void viewImage() {
+		int row = selectedIndex;
+		loadZipFile((String) fileList.get(row));
+	}
+
+	public void setShowPreview(boolean flag) {
+		showPreview = flag;
+		if (flag == false) {
+			previewLabel.setIcon(null);
+		} else {
+			loadImage();
+		}
+	}
+
+	public void scanZipFile(String dir) {
+		updateFileList(dir);
+	}
+
+	void setShowThumbnails(boolean flag) {
+		showThumbnails = flag;
+		if (showThumbnails) {
+			thumbsItem.setText("Hide Thumbnails");
+		} else {
+			thumbsItem.setText("Show Thumbnails");
+		}
+		thumbsIndex.clear();
+		updateListPanel(showThumbnails);
+	}
+
+	public void updateFileList(String dir) {
+
+		RE re = new RE();
+		if (dirView) {
+			if (dir == null || dir.length() == 0) {
+				re.setPattern("[^/]+/?");
+				curDir = null;
+			} else {
+				re.setPattern(dir + "[^/]+/?");
+			}
+		} else {
+			re.setPattern(".*");
+		}
+		totalSize = totalFiles = 0;
+		fileList.clear();
+		String[] list = (String[]) entries.keySet().toArray(new String[0]);
+		Arrays.sort(list);
+		for (int i = 0; i < list.length; i++) {
+			if (re.match(list[i])) {
+				if (regEx.match(list[i])) {
+					if (list[i].endsWith("/")) {
+						fileList.addFirst(list[i]);
+					} else {
+						fileList.addLast(list[i]);
+					}
+					int size = (int) ((ZipEntry) entries.get(list[i]))
+							.getSize();
+					totalSize += size;
+					totalFiles++;
+				}
+			}
+		}
+		if (curDir != null) {
+			fileList.addFirst("../");
+		}
+		previewLabel.setIcon(null);
+		picLabel.setIcon(null);
+		infoLabel
+				.setText("<html><h1>&nbsp;ZipView&nbsp;</h1><br/><br/>&nbsp;Files: "
+						+ totalFiles
+						+ "<br/><br>&nbsp;Size: "
+						+ totalSize
+						+ "</html>");
+		selectedIndex = -1;
+		low_lim = 0;
+		high_lim = low_lim + half_range;
+		updateListPanel(showThumbnails);
+		// refreshFrame();
+
+	}
+
+	public void refreshFrame() {
+		Dimension d = this.getSize();
+		this.setSize(d.width - 1, d.height - 1);
+		this.setTitle(curDir + "    " + getCustomTitle());
+		this.setVisible(true);
+		this.setSize(d.width, d.height);
+	}
+
+	public void loadZipFile(String name) {
+		// checkEntry(name);
+		String htmlCode;
+		String directUrl;
+		String lowerName = name.toLowerCase();
+		if (lowerName.endsWith(".html") || lowerName.endsWith(".htm")
+				|| lowerName.endsWith("txt") || lowerName.endsWith(".xml")
+				|| lowerName.endsWith(".rtf") || lowerName.endsWith(".css")
+				|| lowerName.endsWith(".java") || lowerName.endsWith(".cs")
+				|| lowerName.endsWith(".cpp") || lowerName.endsWith(".c")) {
+			JEditorPane hPane = null;
+
+			if (lowerName.endsWith(".css")) {
+				try {
+					hPane = new JEditorPane("jar:file:" + zipname + "!/" + name);
+					hPane.setContentType("text/plain");
+				} catch (IOException e) {
+					System.out.println("Exception: jeditorpane " + e);
+					return;
+				}
+			} else {
+				hPane = SujOption.createEditorPane("file:" + zipname, name);
+			}
+			JScrollPane displayPane = new JScrollPane(hPane);
+			JFrame showFrame = new JFrame(name);
+			showFrame.setIconImage(sujanTinyIcon.getImage());
+			showFrame.add(displayPane, BorderLayout.CENTER);
+			showFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+			// Display the window.
+			// showFrame.pack();
+			showFrame.setSize(800, 600);
+			showFrame.setVisible(true);
+			System.gc();
+			return;
+		} else if (isImage) {
+			try {
+				ZipEntry entry;
+				if ((entry = entries.get(name)) != null) {
+					if (entry.getName().equals(name)) {
+						int size = (int) entry.getSize();
+						if (size == -1) {
+							return;
+						}
+						InputStream zin = source.getInputStream(entry);
+						byte[] img = StreamCopier.getArray(zin, size);
+						JFrame showFrame = new JFrame(name);
+						showFrame.setIconImage(sujanTinyIcon.getImage());
+						JLabel iLabel = new JLabel();
+						iLabel = new JLabel();
+						iLabel.setHorizontalAlignment(JLabel.CENTER);
+						iLabel.setVerticalAlignment(JLabel.CENTER);
+						iLabel.setVerticalTextPosition(JLabel.CENTER);
+						iLabel.setHorizontalTextPosition(JLabel.CENTER);
+						iLabel.setIcon(new ImageIcon(img));
+						JPanel jp = new JPanel();
+						jp.add(iLabel);
+						JScrollPane displayPane = new JScrollPane(jp);
+						displayPane.setViewportView(iLabel);
+						showFrame.add(displayPane, BorderLayout.CENTER);
+						showFrame
+								.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+						// Display the window.
+						showFrame.pack();
+						showFrame.setVisible(true);
+						zin.close();
+					}
+				}
+			} catch (IOException e) {
+
+				e.printStackTrace();
+			}
+		} else {
+			String msgName = "Cannot render!";
+			String msg = "You can Extract and then view this file with an appropriate application. Row = "
+					+ selectedIndex;
+			System.out.println(msgName + ";" + msg);
+			JOptionPane.showMessageDialog(null, msg, msgName,
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	public void loadEntry(String name) {
+		int type = checkEntry(name);
+		if (type == ROOT_DIR) {
+			// do nothing
+			curDir = null;
+			picLabel.setText("Error: Arrived at unexpect code region.");
+		} else if (type == PAR_DIR) {
+			int pos1 = curDir.lastIndexOf("/");
+			int pos = curDir.lastIndexOf("/", pos1 - 1);
+			String newDir = curDir.substring(0, pos + 1);
+			curDir = newDir;
+			setTitle(curDir + (curDir.length() > 0 ? "  - " : "")
+					+ getCustomTitle());
+			scanZipFile(curDir);
+			picLabel.setText("No Picture");
+		} else if (type == CHILD_DIR) {
+			curDir = name;
+			setTitle(curDir + "  - " + getCustomTitle());
+			scanZipFile(curDir);
+			previewLabel.setIcon(null);
+			picLabel.setIcon(null);
+			picLabel.setText("No Picture");
+		} else if (type != IMAGE) {
+			setTitle(name + "  - " + getCustomTitle());
+			previewLabel.setIcon(null);
+			picLabel.setIcon(null);
+			picLabel.setText("No Picture");
+		} else {
+			setTitle(name + (name.length() > 0 ? "  - " : "")
+					+ getCustomTitle());
+			loadImage();
+		}
+	}
+
+	void loadImage() {
+		if (isImage) {
+			try {
+				ImageIcon zipIC = new ImageIcon(block);
+
+				Image img = zipIC.getImage();
+				ImageIcon iicon = zipIC;
+				int h = pictureScrollPane.getHeight() - 5;
+				int w = pictureScrollPane.getWidth() - 5;
+
+				boolean wider; // (c) Sujan S A 09AUG2007
+				if (((float) w / h) > ((float) iicon.getIconWidth() / iicon
+						.getIconHeight())) {
+					wider = false;
+				} else {
+					wider = true;
+				}
+				if (bestfit) {
+					if (h < iicon.getIconHeight() || w < iicon.getIconWidth()
+							|| zoomSmall) {
+						if (wider) {
+							img = img.getScaledInstance(w, -1, slideScaleType);
+							iicon = new ImageIcon(img);
+						} else {
+							img = img.getScaledInstance(-1, h, slideScaleType);
+							iicon = new ImageIcon(img);
+						}
+					}
+				}
+
+				picLabel.setIcon(iicon);
+				if (showPreview) {
+					Image image = zipIC.getImage();
+					int width = 100;
+					int height = -1;
+					int scaleType = Image.SCALE_FAST;
+					ImageIcon ic = new ImageIcon(image.getScaledInstance(width,
+							height, scaleType));
+					previewLabel.setIcon(ic);
+				} else {
+					previewLabel.setIcon(null);
+				}
+			} catch (Exception e) {
+				System.out.println("Error: loadImage failed: " + e);
+				e.printStackTrace();
+			}
+		}
+		if (picLabel.getIcon() == null) {
+			picLabel.setText("Load Failed");
+		} else {
+			picLabel.setText("");
+		}
+	}
+
+	public int checkEntry(String name) {
+		int res = -1;
+		try {
+			ZipEntry entry;
+			isImage = false;
+			if (name == null || name.length() == 0) {
+				res = ROOT_DIR;
+			} else if (name.compareTo("../") == 0) {
+				int pos1 = curDir.lastIndexOf("/");
+				int pos = curDir.lastIndexOf("/", pos1 - 1);
+				if (pos == 0) {
+					res = ROOT_DIR;
+				} else {
+					res = PAR_DIR;
+				}
+			} else if ((entry = (ZipEntry) entries.get(name)) != null) {// if
+				// ((entry
+				// =
+				// zf.getEntry(name))
+				// !=
+				// null)
+				// {
+				if (entry.getName().equals(name)) {
+					if (entry.isDirectory()) {
+						res = CHILD_DIR;
+					} else {
+						res = FILE;
+						int size = (int) entry.getSize();
+						if (size == -1) {
+							return res;
+						}
+						InputStream zin = source.getInputStream(entry);
+						int len = 0;
+						if (size < 10000000) {
+							block = StreamCopier.getArray(zin, size);
+						} else {
+							System.out.println("Image file is too large. "
+									+ name);
+							block = new byte[100];
+						}
+
+						isImage = false;
+
+						if (block[0] == (byte) 0xff && block[1] == (byte) 0xd8
+								&& block[2] == (byte) 0xff) {
+							isImage = true; // jpg
+						}
+						if (block[0] == (byte) 0x47 && block[1] == (byte) 0x49
+								&& block[2] == (byte) 0x46) {
+							isImage = true; // gif
+						}
+						if (block[0] == (byte) 0x89 && block[1] == (byte) 0x50
+								&& block[2] == (byte) 0x4e) {
+							isImage = true; // png
+						}
+						zin.close();
+					}
+				}
+			}
+		} catch (Exception e) {
+			System.out.println("Exception: checkEntry failed: " + e);
+			e.printStackTrace();
+		}
+		if (isImage && res == FILE) {
+			return IMAGE;
+		} else {
+			return res;
+		}
+	}
+
+	String getCustomTitle() {
+		String str = mainTitle + (slideStopped ? "" : "   [><]");
+		return str;
+	}
+
+	void startSlideShow() {
+		t = new SlideThread();
+		t.start();
+	}
+
+	class SlideThread extends Thread {
+		public void run() {
+			System.out.println("Slide show running ...");
+			slideStopped = false;
+			slideItem.setText("Stop Slide Show");
+			// int i;
+			int lim = (int) fileList.size();
+			for (; selectedIndex < lim; selectedIndex++) {
+				String name = fileList.get(selectedIndex);
+
+				if (!name.endsWith("/")) {// to avoid ../ and dirs
+					loadEntry(name);
+					setHighLighted(selectedIndex);
+					try {
+						Thread.sleep(slideDelay);
+					} catch (Exception e) {
+						System.out.println("Cannot sleep");
+					}
+				}
+				if (slideStopped)
+					break;
+				if (selectedIndex == lim - 1 && isLoop) {
+					selectedIndex = 0;
+				}
+			}
+			/*
+			 * TEST: Start slide show with looping off When slide show halts
+			 * turn looping on Start slide show again => It won't start
+			 */
+			if (selectedIndex == lim) {
+				selectedIndex--;
+			}
+			// stoppedIndex = i;
+			stopSlideShow();
+			System.out.println("Slide show stopped");
+		}
+	};
+
+	void stopSlideShow() {
+		slideStopped = true;
+		slideItem.setText("Start Slide Show");
+		this
+				.setTitle((selectedIndex < fileList.size()
+						&& selectedIndex > -1 ? fileList.get(selectedIndex)
+						+ "   " : "")
+						+ mainTitle);
+		// refreshFrame();
+	}
+
+	/*
+	 * public void closeArchive() { stopSlideShow(); block = null;
+	 * 
+	 * closeMap(); if (listPanel != null) { listPanel.validate();
+	 * listPanel.removeAll(); } if (fileList != null) fileList.clear();
+	 * 
+	 * setTitle(getCustomTitle()); this.repaint();//refreshFrame(); archiveOpen =
+	 * false; isImage = false; enableGUI(false); }
+	 */
+
+	void lockArchive() {
+		String[] pw = new String[2];
+		int count;
+		if (!archiveOpen)
+			return;
+		if (!source_file.canWrite()) {
+			String msgName = "Read only File";
+			String msg = "Cannot modify read only file.";
+			System.out.println(msgName + " : " + msg);
+			JOptionPane.showOptionDialog(null, new JLabel(msg), msgName,
+					JOptionPane.DEFAULT_OPTION, JOptionPane.ERROR_MESSAGE,
+					null, null, null);
+			return;
+		}
+		// get passd
+		count = 0;
+		while (true) {
+			String vmsg = (count == 1 ? "password again" : "password");
+			char cpw[] = SujOption.showPasswordDialog("Enter " + vmsg
+					+ " to lock this file:", vmsg, "pass");
+			if (cpw == null) { // operation cancelled by user
+				return;
+			} else if (cpw.length < 8) {// very important
+				String msgName = "Dangerous Password";
+				String msg = "Password must be atleast 8 characters long.";
+				System.out.println(msgName + " : " + msg);
+				JOptionPane.showOptionDialog(null, new JLabel(msg), msgName,
+						JOptionPane.DEFAULT_OPTION, JOptionPane.ERROR_MESSAGE,
+						wizardIcon, null, null);
+				continue;
+			} else if (cpw != null) {
+				pw[count++] = new String(cpw);
+				if (count < 2) {
+					continue;
+				} else {
+					if (pw[0].compareTo(pw[1]) != 0) {
+						JOptionPane.showOptionDialog(null, new JLabel(
+								"Passwords do not match."), "Try Again",
+								JOptionPane.DEFAULT_OPTION,
+								JOptionPane.ERROR_MESSAGE, null, null, null);
+						count = 0;
+						continue;
+					} else {
+						break; // proceed processing with the pwsd
+					}
+				}
+			}
+		}
+		File arc = source_file;
+		closeArchive();
+		System.out.println("Started SCRAM2007");
+		System.out.flush();
+		long len = Cpt.scramFile(arc, pw[0], true);
+		if (len < 0) {
+			System.out.println("SCRAM2007 failed, ScramLen: " + len);
+		} else {
+			System.out.println("Finished, ScramLen: " + len);
+		}
+	}
+
+	public int unlock(String zp) {
+		File f = new File(zipname);
+		if (!f.canWrite()) {
+			String msgName = "Read Only File";
+			String msg = "Password verification cannot be performed.";
+			System.out.println(msgName + " : " + msg);
+			JOptionPane.showOptionDialog(null, new JLabel(msg), msgName,
+					JOptionPane.DEFAULT_OPTION, JOptionPane.ERROR_MESSAGE,
+					null, null, null);
+			return OPR_OK; //
+		}
+		int res = OPR_CANCELLED;
+		switch (Cpt.checkVersion(f)) {
+		case 0:
+			String pw = null;
+			while (true) {
+				char cpw[] = SujOption.showPasswordDialog(
+						"Enter password to unlock file:", "Password", "pass");
+				if (cpw == null) { // operation cancelled by user
+					return OPR_CANCELLED;
+				} else if (cpw.length < 8) {// very important
+					JOptionPane.showOptionDialog(null, new JLabel(
+							"Password must be atleast 8 characters long."),
+							"Dangerous Password", JOptionPane.DEFAULT_OPTION,
+							JOptionPane.ERROR_MESSAGE, wizardIcon, null, null);
+					continue;
+				}
+				if (cpw != null) {
+					pw = new String(cpw);
+					if (Cpt.checkPassword(f, pw) == 0) {
+						break; // proceed processing with the pwsd
+					} else {
+						System.out.println("Incorrect password");
+						JOptionPane.showOptionDialog(null, new JLabel(
+								"Password check failed. Please try again."),
+								"Incorrect Password",
+								JOptionPane.DEFAULT_OPTION,
+								JOptionPane.ERROR_MESSAGE, null, null, null);
+						continue;
+					}
+				}
+			}
+			System.out.println("Started SCRAM2007");
+			// System.out.flush();
+			long len = Cpt.scramFile(f, pw, false);
+			if (len < 0) {
+				System.out.println("SCRAM2007 failed, ScramLen: " + len);
+				res = OPR_CANCELLED;
+			} else {
+				System.out.println("Finished, ScramLen: " + len);
+				res = OPR_OK;
+				wasLocked = true;
+				lockPassword = pw;
+			}
+			break;
+		case -1:
+			System.out.println("File not locked with SCRAM2007");
+			wasLocked = false;
+			res = OPR_OK;
+			break;
+		}
+		return res;
+	}
+
+	public void openMap(String jar_file_path) throws Exception {
+		closeMap();
+		entries = new HashMap<String, ZipEntry>();
+		fileList = new LinkedList<String>();
+		source_file = new File(jar_file_path);
+		try {
+			source = new ZipFile(jar_file_path);
+
+			// Transfer all the zip entries into local memory to make
+			// them easier to access and manipulate.
+			for (Enumeration e = source.entries(); e.hasMoreElements();) {
+				ZipEntry current = (ZipEntry) e.nextElement();
+				entries.put(current.getName(), current);
+			}
+		} catch (Exception e) { // Assume file doen't exist
+			source = null; // Since the "entries" list will be
+			System.out.println("ERROR: " + e); // empty,
+			throw e;
+		}
+	}
+
+	public void closeMap() {
+		try {
+			if (source != null) {// there is a source archive
+				source.close();
+			}
+		} catch (Exception e) {
+			System.out.println("Exception at source.close(): " + e);
+		}
+		if (entries != null)
+			if (entries.size() > 0)
+				entries.clear();
+	}
+
+	void showRange(int st) {
+		low_lim = st - half_range;
+		if (low_lim < 0) {
+			low_lim = 0;
+		}
+		high_lim = low_lim + 2 * half_range;
+		updateListPanel(showThumbnails);
+	}
+
+	void refreshRange(int indx) {
+		if (!showThumbnails) {
+			return;
+		}
+		if (indx < low_lim || indx >= high_lim) {
+			showRange(indx);
+		}
+	}
+
+	void updateListPanel(boolean renderThumbs) {
+		// System.out.println("updateListPanel()");
+		listPanel.removeAll();
+		int i;
+		int lim = (int) fileList.size();
+		int gridLength = lim;
+		if (gridLength < 20) {
+			gridLength = 20;
+		}
+		listPanel.setLayout(new GridLayout(gridLength, 1));
+		// listScrollPane.setOpaque(true);
+		// listPanel.setOpaque(true);
+		for (i = 0; i < lim; i++) {
+			String name = fileList.get(i);
+
+			JLabel jlabel = new JLabel();
+			if (i % 2 == 0) {
+				jlabel.setBackground(iconbg1);
+			} else {
+				jlabel.setBackground(iconbg2);
+			}
+			jlabel.setOpaque(true);
+			jlabel.setBorder(new LineBorder(Color.WHITE, 1));
+			jlabel.addMouseListener(new MouseListener() {
+				public void mouseClicked(MouseEvent e) {
+
+				}
+
+				public void mouseEntered(MouseEvent e) {
+					if (e.getButton() == MouseEvent.NOBUTTON) { // otherwise do
+						// nothing
+						JLabel lab = ((JLabel) e.getComponent());
+						// if (lab.getToolTipText() == null) {
+						// lab.setToolTipText(""
+						lab.setBorder(new LineBorder(Color.BLUE, 1));
+						String name = lab.getName();
+						int indx = fileList.indexOf(name);
+						if (!name.endsWith("/")) {
+							// refreshRange(indx);
+							recentTouch = indx;
+							decorate(indx);
+						}
+					}
+				}
+
+				public void mouseExited(MouseEvent e) {
+					JLabel lab = ((JLabel) e.getComponent());
+					lab.setBorder(new LineBorder(Color.WHITE, 1));
+				}
+
+				public void mousePressed(MouseEvent e) {
+					// JLabel lab = ((JLabel) e.getComponent());
+					// lab.setBorder(new LineBorder(Color.RED, 1));
+					selectedEntryName = ((JLabel) e.getComponent()).getName();// ((JLabel)
+					// e.getComponent()).getText();
+					selectedIndex = fileList.indexOf(selectedEntryName);
+					// System.out.println("Name: " + selectedEntryName);
+					if (selectedEntryName.endsWith("/")) {
+						stopSlideShow();
+					}
+
+					stoppedIndex = selectedIndex;
+					if (!selectedEntryName.endsWith("/")) {
+						// refreshRange(selectedIndex);
+						setHighLighted(selectedIndex);
+						loadEntry(selectedEntryName);
+
+					}
+					if (e.getButton() == MouseEvent.BUTTON1) {
+						if (selectedEntryName.endsWith("/")) {
+							loadEntry(selectedEntryName);
+						}
+					} else if (e.getButton() == MouseEvent.BUTTON3) { // e.isPopupTrigger())
+						// {
+						if (selectedEntryName.endsWith("/")) {
+							checkEntry(selectedEntryName);
+						}
+						popup.show(e.getComponent(), e.getX(), e.getY());
+					}
+
+				}
+
+				public void mouseReleased(MouseEvent e) {
+					JLabel lab = ((JLabel) e.getComponent());
+					// Color color =
+					// ((LineBorder)lab.getBorder()).getLineColor();
+
+					// lab.setBorder(new LineBorder(Color.WHITE, 1));
+					// lab.setBorder(new LineBorder(color, 1));
+					Color color = lab.getBackground();
+					lab.setBackground(Color.blue);
+					lab.setBackground(color);
+				}
+			});
+			int pos = name.lastIndexOf("/");
+			if (pos == name.length() - 1) {
+				pos = name.lastIndexOf("/", pos - 1);
+			}
+			String shortName;
+			if (pos != -1) {
+				shortName = name.substring(pos + 1);
+			} else {
+				shortName = name;
+			}
+
+			jlabel.setText(shortName);
+			jlabel.setToolTipText(name);
+			jlabel.setName(name);
+			String name_l = name.toLowerCase();
+			if (name_l.endsWith("/")) {// to avoid ../ and dirs
+				jlabel.setIcon(dirIcon);
+			} else if (name_l.endsWith(".jpe") || name_l.endsWith(".jpeg")
+					|| name_l.endsWith(".jpg") || name_l.endsWith(".gif")
+					|| name_l.endsWith(".png")) {
+				// if(renderThumbs && i >= low_lim && i < high_lim &&
+				// checkEntry(name) == IMAGE && isImage) {
+				// ImageIcon img = SujOption.getBestfit(new ImageIcon(block),
+				// 100, 100, true, true, Image.SCALE_FAST);
+				// jlabel.setIcon(img);
+				// } else {
+				jlabel.setIcon(imageFileIcon);
+				// }
+			} else if (name_l.endsWith(".html") || name_l.endsWith(".htm")
+					|| name_l.endsWith(".txt") || name_l.endsWith(".rtf")) {
+				jlabel.setIcon(textFileIcon);
+			} else if (name_l.endsWith(".mpg") || name_l.endsWith(".mpeg")
+					|| name_l.endsWith(".wmv") || name_l.endsWith(".mp4")
+					|| name_l.endsWith(".wma") || name_l.endsWith(".wav")
+					|| name_l.endsWith(".au") || name_l.endsWith(".mp3")) {
+				jlabel.setIcon(mediaIcon);
+
+			} else if (name_l.endsWith(".exe")) {
+				jlabel.setIcon(exeIcon);
+			} else {
+				jlabel.setIcon(unknownFileIcon);
+			}
+
+			listPanel.add(jlabel, i);
+		}
+		setHighLighted();
+
+		listPanel.validate();// just repaint didn't work
+		listScrollPane.validate();// omitting this line caused prb.s when
+		// "Hide Logo"
+		listScrollPane.repaint();
+		this.repaint();
+		thumbsIndex.clear();
+	}
+
+	void undecorateOldest() {
+		int indx = thumbsIndex.get(0);
+		JLabel jl = (JLabel) listPanel.getComponent(indx);
+		jl.setIcon(imageFileIcon);
+		thumbsIndex.remove(0);
+	}
+
+	void decorate(int indx) {
+		String name = fileList.get(indx);
+		if (showThumbnails && thumbsIndex.indexOf(indx) == -1
+				&& checkEntry(name) == IMAGE && isImage) {
+			ImageIcon img = SujOption.getBestfit(new ImageIcon(block), 100,
+					100, true, true, Image.SCALE_FAST);
+			if (thumbsIndex.size() > 2 * half_range) {
+				undecorateOldest();
+			}
+			JLabel jl = (JLabel) listPanel.getComponent(indx);
+			jl.setIcon(img);
+			thumbsIndex.addLast(indx);
+			jl.repaint();
+			listScrollPane.validate();
+			listScrollPane.repaint();
+			this.validate();
+			this.repaint();
+			System.gc();
+		}
+	}
+
+	void decorateAround(int indx, int hr) {
+		int min = indx - hr;
+		int max = indx + hr;
+		if (min < 0)
+			min = 0;
+		if (max > fileList.size())
+			max = fileList.size();
+		for (int i = min; i < max; i++) {
+			decorate(i);
+		}
+	}
+
+	void closeArchive() {
+		File arc = source_file;
+		if (archiveOpen) {
+
+			// closeArchive();
+			stopSlideShow();
+			block = null;
+
+			closeMap();
+			if (listPanel != null) {
+				listPanel.validate();
+				listPanel.removeAll();
+			}
+			if (fileList != null)
+				fileList.clear();
+
+			setTitle(getCustomTitle());
+			this.repaint();// refreshFrame();
+			archiveOpen = false;
+			isImage = false;
+			enableGUI(false);
+			// end of old closeArchive()
+
+			if (wasLocked) {
+				if (JOptionPane.showConfirmDialog(null, "Keep password?",
+						"Confirm Lock", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
+					System.out.println("SCRAM2007 started");
+					long len = Cpt.scramFile(arc, lockPassword, true);
+					if (len < 0) {
+						System.out
+								.println("ERROR SCRAM2007 failed, scramLen : "
+										+ len);
+					} else {
+						System.out.println("SCRAM2007 finished, scramLen : "
+								+ len);
+					}
+				}
+			}
+		}
+		System.out.println("closeArchive() done");
+	}
+
+	void setHighLighted(int i) {
+		if (highLightedIndex != -1) {
+			JLabel jlabel = (JLabel) listPanel.getComponent(highLightedIndex);
+			if (highLightedIndex % 2 == 0) {
+				jlabel.setBackground(iconbg1);
+			} else {
+				jlabel.setBackground(iconbg2);
+			}
+
+		}
+		highLightedIndex = i;
+		if (i != -1) {
+			// selectedIndex = fileList.indexOf(selectedEntryName);
+			JLabel jlabel = (JLabel) listPanel.getComponent(highLightedIndex);
+			jlabel.setBackground(Color.green);
+		}
+		listPanel.validate();
+	}
+
+	void setDefaultTitle(String str) {
+		if (str != null) {
+			this.setTitle(str);
+		} else {
+			this.setTitle("ZipView");
+		}
+	}
+
+	void setHighLighted() {
+		highLightedIndex = -1;
+	}
+
+	void addToRegExOpr() {
+		int row = selectedIndex;
+		String filepath = null;
+		if (row == -1) {
+			JOptionPane.showMessageDialog(null, "Select an file first. Row = "
+					+ row, "No file selected!", JOptionPane.ERROR_MESSAGE);
+			return;
+		}
+		String name = (String) fileList.get(row);
+		regStr = regStr + "|(" + name + ")";
+		// regExList.addFirst(regStr);
+		patternList.setEditable(true);
+		patternList.setSelectedItem(regStr);
+		patternList.setEditable(false);
+		regexField.setText(regexField.getText() + "|(" + name + ")");
+	}
+
+	void enableGUI(boolean flag) {
+		guiEnabled = flag;
+		saveAsZipItem.setEnabled(flag);
+		saveItem.setEnabled(flag);
+		closeItem.setEnabled(flag);
+		closeAndLockItem.setEnabled(flag);
+
+		addToRegexItem.setEnabled(flag);
+		extractItem.setEnabled(flag);
+
+		viewItem.setEnabled(flag);
+		previewItem.setEnabled(flag);
+		slideItem.setEnabled(flag);
+		jumpLeftItem.setEnabled(flag);
+		jumpRightItem.setEnabled(flag);
+		regexField.setEditable(flag);
+		dirViewItem.setEnabled(flag);
+		patternList.setEnabled(flag);
+
+		regexField.setEnabled(false);
+		if (flag) {
+			originalSizeItem.setEnabled(bestfit);
+			bestfitItem.setEnabled(!bestfit);
+			absfitItem.setEnabled(!bestfit || !zoomSmall);
+
+			thumbsItem.setEnabled(true);
+			loopItem.setEnabled(true);
+			if (showThumbnails) {
+				thumbsItem.setText("List View");
+			} else {
+				thumbsItem.setText("Thumbnails");
+			}
+			if (slideScaleType == Image.SCALE_FAST) {
+				fastItem.setEnabled(false);
+				smoothItem.setEnabled(true);
+			} else {
+				fastItem.setEnabled(true);
+				smoothItem.setEnabled(false);
+			}
+		} else {
+			originalSizeItem.setEnabled(false);
+			bestfitItem.setEnabled(false);
+			absfitItem.setEnabled(false);
+			thumbsItem.setEnabled(false);
+			fastItem.setEnabled(false);
+			smoothItem.setEnabled(false);
+			loopItem.setEnabled(false);
+		}
+		if (isLoop) {
+			loopItem.setText("Turn looping OFF");
+		} else {
+			loopItem.setText("Turn looping ON");
+		}
+		int h = pictureScrollPane.getHeight() - 5;
+		int w = pictureScrollPane.getWidth() - 5;
+		picLabel.setIcon(SujOption.getBestfit(defaultImage, w, h, true, false,
+				Image.SCALE_FAST));
+		picLabel.setText("");
+		previewLabel.setIcon(null);
+	}
+
+	void showTip(int i) {
+		JOptionPane.showOptionDialog(null, new JLabel(tipStr[i]),
+				"Tip of the day", JOptionPane.DEFAULT_OPTION,
+				JOptionPane.INFORMATION_MESSAGE, sujanIcon, null, null);
+	}
+
+	void showHelpFrame() {
+		JScrollPane hScrollPane = new JScrollPane(SujOption
+				.createEditorPane(ZipView.class
+						.getResource("/com/sujan/res/doc/ZipViewHelp.html")));
+		JFrame showFrame = new JFrame("ZipView Help");
+		showFrame.setIconImage(sujanTinyIcon.getImage());
+		showFrame.add(hScrollPane, BorderLayout.CENTER);
+		showFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+		/*
+		 * .addWindowListener(new WindowAdapter() { public void
+		 * windowClosing(WindowEvent e) { //maximize mainWindow } });
+		 */
+		// Display the window.
+		showFrame.pack();
+		showFrame.setSize(800, 600);
+		showFrame.setLocation(locX, locY);
+		System.gc();
+		showFrame.setVisible(true);
+		this.setExtendedState(JFrame.ICONIFIED);
+	}
+
+	void showTip() {
+		Random random = new Random();
+		showTip(random.nextInt(tipStr.length));
+	}
+
+	public static final int DEFAULT_WIDTH = 800;
+
+	public static final int DEFAULT_HEIGHT = 590;
+
+	public static final int OPR_CANCELLED = 1;
+
+	public static final int OPR_OK = 2;
+
+	public static final int ERROR = -1;
+
+	public static final int ROOT_DIR = 0;
+
+	public static final int IMAGE = 1;
+
+	public static final int FILE = 2;
+
+	public static final int CHILD_DIR = 3;
+
+	public static final int PAR_DIR = 4;
+
+	Color iconbg1 = new Color(230, 230, 255);
+
+	Color iconbg2 = new Color(255, 255, 230);
+
+	String zipname = null;
+
+	String arcname = null;
+
+	String mainTitle = "ZipView";
+
+	String productName = "ZipView";
+
+	String productVersion = "ZipView26OCT2007";
+
+	String curDir;
+
+	String selectedEntryName = null; // deprecated
+
+	String lockPassword = null;
+
+	String regStr;
+
+	boolean guiEnabled = false;
+
+	boolean colourFlip = true;
+
+	boolean archiveOpen = false;
+
+	boolean isImage = false;
+
+	boolean showPreview = false;
+
+	boolean showThumbnails = false;
+
+	boolean dirView = true;
+
+	boolean showLogo = true;
+
+	boolean slideStopped = true;
+
+	boolean fullScreenMode = false;
+
+	boolean bestfit = true;
+
+	boolean zoomSmall = false;
+
+	boolean isLoop = false;
+
+	boolean wasLocked = false;
+
+	int totalFiles, totalSize;
+
+	int slideScaleType = Image.SCALE_SMOOTH;
+
+	int slideDelay = 2000;
+
+	int selectedIndex = 1;
+
+	int stoppedIndex = 0;
+
+	int jumpIncr = 1; // avoid problems
+
+	int highLightedIndex = 0;
+
+	int locX = 100;
+
+	int locY = 100;
+
+	int low_lim = 0;
+
+	int high_lim = 100;
+
+	int half_range = 10;
+
+	int thumbs_hr = 3;
+
+	int block_scroll = 300;
+
+	int recentTouch = 0;
+
+	RE regEx;
+
+	Map<String, ZipEntry> entries;
+
+	LinkedList<String> fileList;
+
+	LinkedList<String> regExList;
+
+	LinkedList<Integer> thumbsIndex;
+
+	File source_file;
+
+	ZipFile source;
+
+	byte[] block;
+
+	Thread t = null;
+
+	BrowserPanel bPanel;
+
+	JLabel picLabel;
+
+	JLabel infoLabel;
+
+	JLabel previewLabel;
+
+	JTextField regexField;
+
+	JComboBox patternList;
+
+	JPanel iconPanel;
+
+	JPanel listPanel;
+
+	JScrollPane listScrollPane;
+
+	JScrollPane pictureScrollPane;
+
+	JSplitPane splitPane;
+
+	JPopupMenu popup;
+
+	ImageIcon textFileIcon;
+
+	ImageIcon dirIcon;
+
+	ImageIcon imageFileIcon;
+
+	ImageIcon unknownFileIcon;
+
+	ImageIcon largeDirIcon;
+
+	ImageIcon largeExeIcon;
+
+	ImageIcon largeMediaIcon;
+
+	ImageIcon largeImageIcon;
+
+	ImageIcon largeWhiteFileIcon;
+
+	ImageIcon wizardIcon;
+
+	ImageIcon sujanIcon;
+
+	ImageIcon sujanTinyIcon;
+
+	ImageIcon eyeIcon;
+
+	ImageIcon newIcon;
+
+	ImageIcon exeIcon;
+
+	ImageIcon mediaIcon;
+
+	ImageIcon defaultImage;
+
+	JMenuBar menuBar;
+
+	JMenu fileMenu;
+
+	JMenu editMenu;
+
+	JMenu viewMenu;
+
+	JMenu helpMenu;
+
+	JMenuItem createItem;
+
+	JMenuItem openItem;
+
+	JMenuItem saveAsZipItem;
+
+	JMenuItem saveItem;
+
+	JMenuItem closeItem;
+
+	JMenuItem closeAndLockItem;
+
+	JMenuItem exitItem;
+
+	JMenuItem addToRegexItem;
+
+	JMenuItem extractItem;
+
+	JMenuItem nextRangeItem;
+
+	JMenuItem prevRangeItem;
+
+	JMenuItem preferencesItem;
+
+	JMenuItem thumbsItem;
+
+	JMenuItem dirViewItem;
+
+	JMenuItem originalSizeItem;
+
+	JMenuItem bestfitItem;
+
+	JMenuItem absfitItem;
+
+	JMenuItem fastItem;
+
+	JMenuItem smoothItem;
+
+	JMenuItem viewItem;
+
+	JMenuItem slideItem;
+
+	JMenuItem previewItem;
+
+	JMenuItem logoItem;
+
+	JMenuItem fullScreenItem;
+
+	JMenuItem jumpLeftItem;
+
+	JMenuItem jumpRightItem;
+
+	JMenuItem loopItem;
+
+	JMenuItem consoleItem;
+
+	JMenuItem helpItem;
+
+	JMenuItem regexHelpItem;
+
+	JMenuItem aboutItem;
+
+	JMenuItem extractAllItem;
+
+	JMenuItem picItem;
+
+	JMenuItem browserItem;
+
+	JMenuItem addItem;
+
+	JMenuItem deleteItem;
+
+	JMenuItem renameItem;
+
+	JFileChooser chooser;
+
+	GraphicsEnvironment ge;
+
+	GraphicsDevice gd;
+
+	String aboutStr;
+
+	String tipStr[] = {
+			"<html>"
+					+ "<p>You can view HTML files by right-clicking on the file icon and selecting View file.</p>"
+					+ "</html>",
+			"<html>"
+					+ "You can e-mail <font color=\"blue\">messagesujan@yahoo.co.in</font> for help."
+					+ "</html>",
+			"<html>"
+					+ "You can also view the contents of text, HTML, XML, and rtf files with ZipView."
+					+ "</html>",
+			"<html>"
+					+ "<p>To extract files right-click on the file/directory and select Extract.<p>"
+					+ "</html>",
+			"<html>"
+					+ "<p>You can hide the blue info-bar on the left side by clicking View >> Hide Info.<p>"
+					+ "</html>",
+			"<html>"
+					+ "<p>To view slide-show of the currently listed images click View >> Start Slide show.<p>"
+					+ "</html>",
+			"<html>"
+					+ "<p>To change the delay for slide-show click Edit >> Prefrences and enter delay in milli-seconds.<p>"
+					+ "</html>",
+			"<html>"
+					+ "<p>To learn more about free softwares and the Crisbox project e-mail: <font color=\"blue\">messagesujan@yahoo.co.in</font><p>"
+					+ "</html>",
+			"<html>"
+					+ "<p>To to participate in the Crisbox project e-mail: <font color=\"blue\">messagesujan@yahoo.co.in</font><p>"
+					+ "</html>",
+			"<html>" + "<p>ZipView can display Thumbnails for images.<p>"
+					+ "</html>" };
+
+}
+
+class ExtensionFileFilter extends FileFilter {
+	public void addExtension(String extension) {
+		if (!extension.startsWith(".")) {
+			extension = "." + extension;
+		}
+		extensions.add(extension.toLowerCase());
+	}
+
+	public void setDescription(String aDescription) {
+		description = aDescription;
+	}
+
+	public String getDescription() {
+		return description;
+	}
+
+	public boolean accept(File f) {
+		if (f.isDirectory()) {
+			return true;
+		}
+		String name = f.getName().toLowerCase();
+
+		for (String e : extensions) {
+			if (name.endsWith(e)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private String description = "";
+
+	private ArrayList<String> extensions = new ArrayList<String>();
+}
+
+class Preferences {
+	int slideDelay = 2000;
+
+	boolean isBestFit = false;
+
+	boolean isLoop = true;
+
+	// public Preferences();
+	public void setSlideDelay(int sd) {
+		slideDelay = sd;
+	}
+
+	public void setisBestFit(boolean flag) {
+		isBestFit = flag;
+	}
+
+	public void setisLoop(boolean flag) {
+		isLoop = flag;
+	}
+
+	public int getSlideDelay() {
+		return slideDelay;
+	}
+
+	public boolean getisBestFit() {
+		return isBestFit;
+	}
+
+	public boolean getisLoop() {
+		return isLoop;
+	}
+}
+
+class PreferencesPanel extends JPanel {
+	JButton okButton;
+
+	JTextField delayField;
+
+	JTextField loopField;
+
+	public PreferencesPanel() {
+		setLayout(new BorderLayout());
+
+		// fields
+
+		JPanel panel = new JPanel();
+		panel.setLayout(new GridLayout(2, 2));
+		panel.add(new JLabel("Slide Delay:"));
+		panel.add(delayField = new JTextField(""));
+		panel.add(new JLabel("Loop slide show:"));
+
+		panel.add(loopField = new JTextField(""));
+		add(panel, BorderLayout.CENTER);
+
+		// buttons
+
+		okButton = new JButton("OK");
+		// okButton.addActionListener(new ActionListener()
+		// public void actionPerformed(Action
+	}
+}
